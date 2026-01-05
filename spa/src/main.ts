@@ -32,7 +32,7 @@ let geminiReady = false;
 let geminiAudioContext: AudioContext | null = null;
 let geminiMicStream: MediaStream | null = null;
 let geminiSource: MediaStreamAudioSourceNode | null = null;
-let geminiProcessor: ScriptProcessorNode | null = null;
+let geminiWorklet: AudioWorkletNode | null = null;
 let geminiSilentGain: GainNode | null = null;
 let geminiOutputTime = 0;
 const geminiPlaying = new Set<AudioBufferSourceNode>();
@@ -267,16 +267,21 @@ async function startGeminiMic() {
   if (!geminiMicStream) {
     geminiMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   }
+  await ctx.audioWorklet.addModule(
+    new URL("./worklets/gemini-mic-processor.ts", import.meta.url),
+  );
   geminiSource = ctx.createMediaStreamSource(geminiMicStream);
-  geminiProcessor = ctx.createScriptProcessor(2048, 1, 1);
+  geminiWorklet = new AudioWorkletNode(ctx, "gemini-mic-processor");
   geminiSilentGain = ctx.createGain();
   geminiSilentGain.gain.value = 0;
-  geminiProcessor.onaudioprocess = (event) => {
+  geminiWorklet.port.onmessage = (event) => {
     if (!geminiWs || geminiWs.readyState !== WebSocket.OPEN || !geminiReady) {
       return;
     }
-    const input = event.inputBuffer.getChannelData(0);
-    const pcm16 = downsampleTo16k(input, ctx.sampleRate);
+    const { buffer, sampleRate } = event.data ?? {};
+    if (!buffer || typeof sampleRate !== "number") return;
+    const input = new Float32Array(buffer as ArrayBuffer);
+    const pcm16 = downsampleTo16k(input, sampleRate);
     const base64 = int16ToBase64(pcm16);
     geminiWs.send(
       JSON.stringify({
@@ -286,18 +291,18 @@ async function startGeminiMic() {
       }),
     );
   };
-  geminiSource.connect(geminiProcessor);
-  geminiProcessor.connect(geminiSilentGain);
+  geminiSource.connect(geminiWorklet);
+  geminiWorklet.connect(geminiSilentGain);
   geminiSilentGain.connect(ctx.destination);
   geminiMicBtn.textContent = "Gemini Mic Off";
   logGemini("マイク送信を開始しました");
 }
 
 function stopGeminiMic() {
-  if (geminiProcessor) {
-    geminiProcessor.disconnect();
-    geminiProcessor.onaudioprocess = null;
-    geminiProcessor = null;
+  if (geminiWorklet) {
+    geminiWorklet.port.onmessage = null;
+    geminiWorklet.disconnect();
+    geminiWorklet = null;
   }
   if (geminiSilentGain) {
     geminiSilentGain.disconnect();
@@ -523,7 +528,7 @@ geminiDisconnectBtn.addEventListener("click", () => {
 
 geminiMicBtn.addEventListener("click", async () => {
   if (!geminiWs || geminiWs.readyState !== WebSocket.OPEN) return;
-  if (geminiProcessor) {
+  if (geminiWorklet) {
     stopGeminiMic();
   } else {
     await startGeminiMic();
