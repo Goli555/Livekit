@@ -25,6 +25,8 @@ const geminiSessionEl = document.querySelector<HTMLDivElement>("#geminiSession")
 const geminiTranscript = document.querySelector<HTMLPreElement>("#geminiTranscript")!;
 const geminiLogs = document.querySelector<HTMLPreElement>("#geminiLogs")!;
 
+const debugGemini = (import.meta.env.VITE_DEBUG_GEMINI as string) === "1";
+
 let room: Room | null = null;
 let localTrack: Track | null = null;
 let geminiWs: WebSocket | null = null;
@@ -60,6 +62,15 @@ function logGemini(message: string) {
     geminiLogs.textContent = next;
   } else {
     geminiLogs.textContent += `\n${next}`;
+  }
+}
+
+function logGeminiDebug(message: string, payload?: unknown) {
+  if (!debugGemini) return;
+  if (payload === undefined) {
+    console.debug(`[gemini][debug] ${message}`);
+  } else {
+    console.debug(`[gemini][debug] ${message}`, payload);
   }
 }
 
@@ -427,6 +438,7 @@ geminiConnectBtn.addEventListener("click", async () => {
     geminiWs.addEventListener("open", () => {
       setGeminiStatus("connected");
       logGemini("Gemini WebSocketに接続しました");
+      logGeminiDebug("ws open");
       geminiConnectBtn.disabled = true;
       geminiDisconnectBtn.disabled = false;
     });
@@ -450,10 +462,12 @@ geminiConnectBtn.addEventListener("click", async () => {
         geminiMicBtn.disabled = false;
         setGeminiStatus("ready");
         logGemini("Geminiセットアップ完了");
+        logGeminiDebug("ready");
         return;
       }
       if (payload.type === "status") {
         logGemini(`status: ${payload.status ?? ""} ${payload.code ?? ""} ${payload.reason ?? ""}`);
+        logGeminiDebug("status", payload);
         if (payload.status === "gemini_closed") {
           setGeminiStatus("closed");
         }
@@ -461,10 +475,15 @@ geminiConnectBtn.addEventListener("click", async () => {
       }
       if (payload.type === "error") {
         logGemini(`error: ${payload.message ?? "unknown"}`);
+        logGeminiDebug("error", payload);
         setGeminiStatus("error");
         return;
       }
       if (payload.type === "gemini") {
+        logGeminiDebug("gemini message", {
+          hasServerContent: Boolean(payload.message?.serverContent),
+          hasGoAway: Boolean(payload.message?.goAway),
+        });
         const message = payload.message ?? {};
         const serverContent = message.serverContent ?? {};
         if (serverContent.interrupted) {
@@ -490,6 +509,7 @@ geminiConnectBtn.addEventListener("click", async () => {
         }
         if (message.goAway) {
           logGemini("GoAwayを受信しました。再接続を検討してください。");
+          logGeminiDebug("goAway", message.goAway);
         }
         if (message.usageMetadata) {
           logGemini(`tokens: ${message.usageMetadata.totalTokenCount ?? "-"}`);
@@ -499,6 +519,7 @@ geminiConnectBtn.addEventListener("click", async () => {
     geminiWs.addEventListener("close", (event) => {
       setGeminiStatus("disconnected");
       logGemini(`WebSocket close: ${event.code} ${event.reason}`);
+      logGeminiDebug("ws close", { code: event.code, reason: event.reason });
       geminiConnectBtn.disabled = false;
       geminiDisconnectBtn.disabled = true;
       geminiMicBtn.disabled = true;
@@ -510,11 +531,13 @@ geminiConnectBtn.addEventListener("click", async () => {
     geminiWs.addEventListener("error", () => {
       setGeminiStatus("error");
       logGemini("WebSocketエラー");
+      logGeminiDebug("ws error");
     });
   } catch (err) {
     console.error(err);
     setGeminiStatus("error");
     logGemini("接続に失敗しました");
+    logGeminiDebug("connect error", err);
   }
 });
 

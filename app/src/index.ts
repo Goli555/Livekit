@@ -26,6 +26,7 @@ const geminiModel =
   process.env.GEMINI_LIVE_MODEL ?? "gemini-2.5-flash-native-audio-preview-12-2025";
 const enableGeminiBridge = process.env.ENABLE_GEMINI_BRIDGE === "1";
 const enableDebugTranscript = process.env.ENABLE_DEBUG_TRANSCRIPT === "1";
+const debugGemini = process.env.DEBUG_GEMINI === "1";
 const geminiApiKey = process.env.GEMINI_API_KEY ?? "";
 const geminiWsEndpoint =
   process.env.GEMINI_LIVE_WS_ENDPOINT ??
@@ -164,9 +165,33 @@ function parseJson<T>(data: RawData): T | null {
   }
 }
 
+function debugLog(message: string, payload?: unknown) {
+  if (!debugGemini) return;
+  if (payload === undefined) {
+    console.log(`[gemini][debug] ${message}`);
+  } else {
+    console.log(`[gemini][debug] ${message}`, payload);
+  }
+}
+
+type WsSocketInfo = {
+  remoteAddress?: string;
+  remotePort?: number;
+};
+
+function getSocketInfo(ws: WebSocket): WsSocketInfo {
+  const socket = (ws as WebSocket & { _socket?: WsSocketInfo })._socket;
+  return {
+    remoteAddress: socket?.remoteAddress,
+    remotePort: socket?.remotePort,
+  };
+}
+
 wss.on("connection", (client) => {
   const sessionId = randomUUID();
+  const connectedAt = Date.now();
   console.log(`[gemini][${sessionId}] client connected`);
+  debugLog(`[${sessionId}] client ip`, getSocketInfo(client));
 
   if (!enableGeminiBridge) {
     sendJson(client, { type: "error", message: "Gemini bridge is disabled." });
@@ -183,6 +208,7 @@ wss.on("connection", (client) => {
 
   geminiWs.on("open", () => {
     console.log(`[gemini][${sessionId}] upstream connected`);
+    debugLog(`[${sessionId}] upstream open`);
     sendJson(geminiWs, buildGeminiSetup());
     sendJson(client, { type: "status", status: "gemini_connected" });
   });
@@ -193,6 +219,11 @@ wss.on("connection", (client) => {
       console.warn(`[gemini][${sessionId}] failed to parse upstream message`);
       return;
     }
+    debugLog(`[${sessionId}] upstream message`, {
+      keys: Object.keys(message),
+      hasGoAway: Object.prototype.hasOwnProperty.call(message, "goAway"),
+      hasServerContent: Object.prototype.hasOwnProperty.call(message, "serverContent"),
+    });
     if (Object.prototype.hasOwnProperty.call(message, "setupComplete")) {
       sendJson(client, { type: "ready" });
     }
@@ -202,12 +233,18 @@ wss.on("connection", (client) => {
   geminiWs.on("close", (code, reason) => {
     const detail = reason.toString();
     console.log(`[gemini][${sessionId}] upstream closed ${code} ${detail}`);
+    debugLog(`[${sessionId}] upstream closed`, {
+      code,
+      reason: detail,
+      elapsedMs: Date.now() - connectedAt,
+    });
     sendJson(client, { type: "status", status: "gemini_closed", code, reason: detail });
     client.close(1011, "Gemini upstream closed");
   });
 
   geminiWs.on("error", (err) => {
     console.error(`[gemini][${sessionId}] upstream error`, err);
+    debugLog(`[${sessionId}] upstream error`, { message: String(err) });
     sendJson(client, { type: "error", message: "Gemini upstream error." });
   });
 
@@ -217,6 +254,11 @@ wss.on("connection", (client) => {
       sendJson(client, { type: "error", message: "Invalid client message." });
       return;
     }
+    debugLog(`[${sessionId}] client message`, {
+      type: message.type,
+      dataBytes: message.data ? message.data.length : 0,
+      mimeType: message.mimeType,
+    });
 
     if (message.type === "ping") {
       sendJson(client, { type: "pong" });
@@ -262,8 +304,14 @@ wss.on("connection", (client) => {
     sendJson(client, { type: "error", message: `Unknown message type: ${message.type}` });
   });
 
-  client.on("close", () => {
+  client.on("close", (code, reason) => {
+    const detail = reason.toString();
     console.log(`[gemini][${sessionId}] client disconnected`);
+    debugLog(`[${sessionId}] client closed`, {
+      code,
+      reason: detail,
+      elapsedMs: Date.now() - connectedAt,
+    });
     if (geminiWs.readyState === WebSocket.OPEN) {
       geminiWs.close(1000, "Client disconnected");
     } else {
@@ -273,6 +321,7 @@ wss.on("connection", (client) => {
 
   client.on("error", (err) => {
     console.error(`[gemini][${sessionId}] client error`, err);
+    debugLog(`[${sessionId}] client error`, { message: String(err) });
   });
 });
 
