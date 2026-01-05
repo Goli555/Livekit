@@ -17,6 +17,14 @@
 4. `http://localhost:5173` を開く
 5. 同じ部屋名で2タブ開き、互いにマイク音声が届くことを確認
 
+## TURN（coturn）設定（Docker Desktop向け）
+Docker Desktop環境ではICEが不安定になるため、coturnを使ってrelayを強制しています。
+以下の値はローカルIPに合わせて調整してください。
+
+1. `docker-compose.yml` の `coturn` にある `--user=demo:demo` を変更
+2. `spa/src/main.ts` の `turn:192.168.50.3:3478` と `username/credential` を同じ値に合わせる
+3. 必要に応じて `iceTransportPolicy: "relay"` を外す（本番では推奨）
+
 ## Transcriptテスト（ダミー送信）
 Gemini Liveに接続せずUI表示を確認したい場合はデバッグ用エンドポイントを使います。
 1. `.env` に `ENABLE_DEBUG_TRANSCRIPT=1` を追加
@@ -47,7 +55,7 @@ SPAはアプリサーバーの `/gemini` WebSocket に接続し、サーバー�
 - 出力音声は 24kHz PCM
 - 入出力の文字起こしは `inputAudioTranscription` / `outputAudioTranscription` を有効化
 - VADは自動検出を使用（`GEMINI_VAD_*` で調整可能）
-- Gemini音声は `GEMINI_AUDIO_VIA_LIVEKIT=1` でLiveKitにpublish（ローカル再生は無効）
+- Gemini音声はローカル再生 + LiveKit publish の両方を使用（現在はrelay強制）
 
 ## ファイル一覧
 - `docker-compose.yml`
