@@ -1,0 +1,62 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "8780:8780"
+      - "8781:8781"
+      - "8782:8782/udp"
+    restart: unless-stopped
+
+  app:
+    build: ./app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_LIVE_MODEL=${GEMINI_LIVE_MODEL}
+      - GEMINI_LIVE_WS_ENDPOINT=${GEMINI_LIVE_WS_ENDPOINT}
+      - GEMINI_VAD_START_SENSITIVITY=${GEMINI_VAD_START_SENSITIVITY}
+      - GEMINI_VAD_END_SENSITIVITY=${GEMINI_VAD_END_SENSITIVITY}
+      - GEMINI_VAD_PREFIX_PADDING_MS=${GEMINI_VAD_PREFIX_PADDING_MS}
+      - GEMINI_VAD_SILENCE_DURATION_MS=${GEMINI_VAD_SILENCE_DURATION_MS}
+      - GEMINI_AUDIO_VIA_LIVEKIT=${GEMINI_AUDIO_VIA_LIVEKIT}
+      - GEMINI_LOCAL_PLAYBACK=${GEMINI_LOCAL_PLAYBACK}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - LIVEKIT_URL=${LIVEKIT_URL}
+      - APP_PORT=3300
+      - ENABLE_GEMINI_BRIDGE=${ENABLE_GEMINI_BRIDGE}
+      - ENABLE_DEBUG_TRANSCRIPT=${ENABLE_DEBUG_TRANSCRIPT}
+      - CORS_ORIGIN=${CORS_ORIGIN}
+    depends_on:
+      - livekit
+    ports:
+      - "3300:3300"
+
+  spa:
+    build: ./spa
+    environment:
+      - VITE_APP_BASE_URL=${VITE_APP_BASE_URL}
+    depends_on:
+      - app
+    ports:
+      - "5173:5173"
+
+  coturn:
+    image: instrumentisto/coturn:latest
+    command:
+      [
+        "-n",
+        "--log-file=stdout",
+        "--min-port=49160",
+        "--max-port=49200",
+        "--lt-cred-mech",
+        "--realm=local",
+        "--user=demo:demo",
+      ]
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49160-49200:49160-49200/udp"
+    restart: unless-stopped

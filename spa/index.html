@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LiveKit + Gemini Live (Test)</title>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>LiveKit + Gemini Live (Test)</h1>
+        <p class="subtitle">まずはLiveKit音声を安定動作させるための最小UI</p>
+      </header>
+      <section class="panel">
+        <div class="row">
+          <label>Room</label>
+          <input id="roomInput" value="demo" />
+        </div>
+        <div class="row">
+          <label>Identity</label>
+          <input id="identityInput" placeholder="auto" />
+        </div>
+        <div class="row">
+          <button id="connectBtn">Connect</button>
+          <button id="disconnectBtn" disabled>Disconnect</button>
+          <button id="micBtn" disabled>Mic On</button>
+        </div>
+        <div class="status" id="status">Status: idle</div>
+      </section>
+      <section class="panel">
+        <h2>Gemini Live</h2>
+        <div class="row">
+          <button id="geminiConnectBtn">Gemini Connect</button>
+          <button id="geminiDisconnectBtn" disabled>Gemini Disconnect</button>
+          <button id="geminiMicBtn" disabled>Gemini Mic On</button>
+        </div>
+        <div class="row">
+          <span class="badge">Gemini音声: LiveKit経由のみ</span>
+        </div>
+        <div class="status" id="geminiStatus">Gemini: idle</div>
+        <div class="status subtle" id="geminiSession">Session: -</div>
+      </section>
+      <section class="panel">
+        <h2>Remote Audio</h2>
+        <audio id="remoteAudio" autoplay></audio>
+      </section>
+      <section class="panel">
+        <h2>Gemini Transcript</h2>
+        <pre id="geminiTranscript">(Gemini bridge disabled)</pre>
+      </section>
+      <section class="panel">
+        <h2>Gemini Logs</h2>
+        <pre id="geminiLogs">(no logs yet)</pre>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

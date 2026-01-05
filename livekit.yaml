@@ -1,0 +1,7 @@
+port: 8780
+rtc:
+  tcp_port: 8781
+  udp_port: 8782
+  use_external_ip: false
+keys:
+  devkey: devsecret_devsecret_devsecret_32
